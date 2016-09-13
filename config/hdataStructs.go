@@ -15,3 +15,24 @@ type Property struct {
 	Value       string `xml:"value"`
 	Description string `xml:"description"`
 }
+
+//------------------------------------
+type Reader struct {
+	Name  string `xml:"name"`
+	Class string `xml:"class"`
+}
+type Writer struct {
+	Name  string `xml:"name"`
+	Class string `xml:"class"`
+}
+type Readers struct {
+	ReaderList []*Reader `xml:"reader"`
+}
+type Writers struct {
+	WriterList []*Writer `xml:"writer"`
+}
+type Plugins struct {
+	XMLName xml.Name `xml:"plugins"`
+	R       *Readers `xml:"readers"`
+	W       *Writers `xml:"writers"`
+}
