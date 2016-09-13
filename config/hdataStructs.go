@@ -1,5 +1,9 @@
 package config
 
+import (
+	"encoding/xml"
+)
+
 type Hdata struct {
 	Configuration `xml:"configuration"`
 }
