@@ -32,11 +32,8 @@ func HdataPluginsXML(path string) {
 	xml.Unmarshal(content, data)
 	for _, v := range data.R.ReaderList {
 		ReaderMap[v.Name] = v.Class
-		//fmt.Println(v.Class)
+		for _, v := range data.W.WriterList {
+			WriterMap[v.Name] = v.Class
+		}
 	}
-	for _, v := range data.W.WriterList {
-		WriterMap[v.Name] = v.Class
-		//fmt.Println(v.Name)
-	}
-
 }

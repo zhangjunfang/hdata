@@ -31,6 +31,7 @@ func (d *DefaultJobConfig) GetWriterName() string {
 }
 
 func (d *DefaultJobConfig) NewReader() Reader {
+
 	return d
 }
 
