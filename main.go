@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	BufferSize int64 = (1 << 16) * 2048
-	BufferMask int64 = BufferSize - 1
+	BufferSize   int64 = (1 << 16) * 2048
+	BufferMask   int64 = BufferSize - 1
+	Reservations int64 = 1024
 )
 
 var ring [BufferSize]*Student
@@ -32,21 +33,32 @@ func (s *Student) String() string {
 
 var rows *sql.Rows
 var stmt *sql.Stmt
+var db *sql.DB
 
 func init() {
 	dataSourceName := "root:@tcp(localhost:3306)/zhangboyu?charset=utf8"
-	db, err := util.GetConnection("mysql", dataSourceName, 10, 10)
-	if err != nil {
-		fmt.Println(err)
-	}
-	rows, err = db.Query(" SELECT u.id ,u.`name` FROM `user` as u ")
-	stmt, err = db.Prepare(" INSERT INTO cc(id ,name) VALUES(?,?) ")
+	db, _ = util.GetConnection("mysql", dataSourceName, 10, 10)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//	}
+	//rows, _ = db.Query(" SELECT u.id ,u.`name` FROM `user` as u ")
+	rows, _ = db.Query(" SELECT u.id ,u.`name` FROM `dd` as u ")
+	stmt, _ = db.Prepare(" INSERT INTO cc(id ,name) VALUES(?,?) ")
+
 }
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	//	tx, _ := db.Begin()
+	//	stmt, _ := tx.Prepare(" INSERT INTO dd(id ,name) VALUES(?,?) ")
+	//	for i := 0; i < 1000000; i++ {
+	//		stmt.Exec(i, strconv.Itoa(i))
+	//	}
+	//	tx.Commit()
+	//	stmt.Close()
 
-	fmt.Println("fsdfsdf", BufferSize)
-	controller := disruptor.Configure(BufferSize).WithConsumerGroup(SampleConsumer{}, SampleConsumer{}, SampleConsumer{}).
+	//	return
+
+	controller := disruptor.Configure(BufferSize).WithConsumerGroup(SampleConsumer{}).
 		BuildShared()
 		//Build()
 
@@ -54,10 +66,11 @@ func main() {
 
 	started := time.Now()
 	//publish(controller.Writer())
-	publishShared(controller.Writer())
+	//publishShared(controller.Writer())
+	publishSharedBatch(controller.Writer())
 	finished := time.Now()
 	fmt.Println("耗时：", finished.Sub(started))
-	time.Sleep(24 * time.Hour)
+	time.Sleep(1 * time.Hour)
 	controller.Stop()
 
 }
@@ -94,14 +107,68 @@ func publishShared(writer *disruptor.SharedWriter) {
 	}
 	//writer.Commit(0, sequence) //每生产一批 提交批次
 }
+func publishSharedBatch(writer *disruptor.SharedWriter) {
+	sequence := int64(0)
+	var id int64
+	var name string
+	for rows.Next() {
+		sequence = writer.Reserve(Reservations) //数据每次递增
+		count := int64(1)
+		for lower := sequence - Reservations + 1; lower <= sequence && rows.Next(); lower++ {
+			rows.Scan(&id, &name)
+			ring[lower&BufferMask] = &Student{
+				Id:   id,
+				Name: name,
+			}
+			count++
+		}
+		writer.Commit(sequence-count+1, sequence) //每生产一批 提交批次
+	}
+}
 
 type SampleConsumer struct{}
 
 func (this SampleConsumer) Consume(lower, upper int64) {
+
+	started := time.Now()
 	for lower <= upper {
 		message := ring[lower&BufferMask]
-		fmt.Println(lower, "----------", message, "----------", upper)
-		stmt.Exec(message.Id, message.Name)
+		if message != nil {
+			stmt.Exec(message.Id, message.Name)
+		}
 		lower++
 	}
+	finished := time.Now()
+	fmt.Println("耗时：", finished.Sub(started))
+	stmt.Close()
+}
+
+func (this SampleConsumer) Consume3(lower, upper int64) {
+	tx, _ := db.Begin()
+	stmt, _ := tx.Prepare(" INSERT INTO dd(id ,name) VALUES(?,?) ")
+	started := time.Now()
+	for lower <= upper {
+		message := ring[lower&BufferMask]
+		if message != nil {
+			stmt.Exec(message.Id, message.Name)
+		}
+		lower++
+	}
+	tx.Commit()
+	finished := time.Now()
+	fmt.Println("耗时：", finished.Sub(started))
+	stmt.Close()
+}
+
+func (this SampleConsumer) Consume2(lower, upper int64) {
+	started := time.Now()
+	for lower <= upper {
+		message := ring[lower&BufferMask]
+		if message != nil {
+			stmt.Exec(message.Id, message.Name)
+		}
+		lower++
+	}
+	finished := time.Now()
+	fmt.Println("耗时：", finished.Sub(started))
 }
